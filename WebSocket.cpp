@@ -2,8 +2,9 @@
 #include "sha1.h"
 #include "base64.h"
 
-WebSocket::WebSocket(uint16_t port, onOpen_t onOpen, onMessage_t onMessage, onClose_t onClose, onError_t onError) : server(port) {
+WebSocket::WebSocket(uint16_t port, char *supportedProtocol, onOpen_t onOpen, onMessage_t onMessage, onClose_t onClose, onError_t onError) : server(port) {
   this->port = port;
+  this->supportedProtocol = strdup(supportedProtocol);
   this->onOpen = onOpen;
   this->onMessage = onMessage;
   this->onClose = onClose;
@@ -145,7 +146,9 @@ int WebSocket::handshake(char *requestURI) {
     client.print("Sec-WebSocket-Accept: ");
     client.print(wsKey);
     client.print("\r\n");
-    client.print("Sec-WebSocket-Protocol: chat\r\n");
+    client.print("Sec-WebSocket-Protocol: ");
+    client.print(supportedProtocol);
+    client.print("\r\n");
     client.print("\r\n");
 
     status = OPEN;
@@ -210,5 +213,4 @@ int WebSocket::readFrame(char *payloadData, int *payloadLength) {
   
   return opcode;
 }
-
 
