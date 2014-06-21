@@ -28,8 +28,10 @@
 #define WS_HAS_SEC_WEBSOCKET_VERSION  0x20
 #define WS_HAS_ALL_HEADERS            0x3f
 
-#define WS_FRAME_TEXT  0x01
-#define WS_FRAME_CLOSE 0x08
+#define WS_FRAME_TEXT   0x01
+#define WS_FRAME_BINARY 0x02
+#define WS_FRAME_CLOSE  0x08
+#define WS_FRAME_FIN    0x80
 
 #define WS_CLOSE_NORMAL          1000
 #define WS_CLOSE_PROTOCOL_ERROR  1002
@@ -44,6 +46,13 @@ typedef enum {
   CLOSED = 3, 
 } wsStatus;
 
+typedef struct {
+  char *header;
+  char *value;
+  uint8_t validation;
+  char *variable;
+} wsHeader;
+
 typedef void (*onOpen_t)(char *requestURI);
 typedef void (*onMessage_t)(char *payload, int payloadLength);
 typedef void (*onClose_t)();
@@ -56,6 +65,8 @@ public:
   void begin();
   int available();
   int sendText(char *text);
+  int sendBinary(uint8_t *data, uint8_t dataLength);
+  int sendPayload(uint8_t *payLoadData, uint8_t payloadLength, uint8_t opcode);
   int sendClose(uint16_t statusCode);
 private:
   EthernetServer server;

@@ -42,6 +42,7 @@ int WebSocket::available() {
       opcode = readFrame(payloadData, &payloadLength);
       switch (opcode) {
       case WS_FRAME_TEXT:
+      case WS_FRAME_BINARY:
         if (onMessage) {
           onMessage(payloadData, payloadLength);
         }
@@ -70,15 +71,23 @@ int WebSocket::available() {
 int WebSocket::sendText(char *text) {
   uint8_t payloadLength = strlen(text);
   
+  return sendPayload((uint8_t *)text, payloadLength, WS_FRAME_TEXT);
+}
+
+int WebSocket::sendBinary(uint8_t *data, uint8_t dataLength) {
+  return sendPayload(data, dataLength, WS_FRAME_BINARY);
+}
+
+int WebSocket::sendPayload(uint8_t *payLoadData, uint8_t payloadLength, uint8_t opcode) {
   if (status == OPEN) {
     if (payloadLength > WS_MAX_PAYLOAD_LENGTH) {
       return WS_LINE_TOO_LONG;
     }
     
-    client.write(0x81);
+    client.write(WS_FRAME_FIN | opcode);
     client.write(payloadLength & 0x7f);
     for (int i = 0; i < payloadLength; i++) {
-      client.write(text[i]);
+      client.write(payLoadData[i]);
     }
     return WS_OK;
   } else {
@@ -88,7 +97,7 @@ int WebSocket::sendText(char *text) {
 
 int WebSocket::sendClose(uint16_t statusCode) {
   if (status == OPEN) {
-    client.write(0x88);
+    client.write(WS_FRAME_FIN | WS_FRAME_CLOSE);
     client.write((uint8_t)(statusCode >> 8));
     client.write((uint8_t)(statusCode & 0xff));
     status = CLOSED;
