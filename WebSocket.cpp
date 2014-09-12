@@ -129,6 +129,8 @@ int WebSocket::handshake(char *requestURI) {
       }
     } else if (strncasecmp((char *)buffer, "connection:", 11) == 0) {
       headerValidation |= WS_HAS_CONNECTION;
+    } else if (strncasecmp((char *)buffer, "sec-websocket-protocol:", 23) == 0) {
+      headerValidation |= WS_HAS_SUBPROTOCOL;
     } else if (strncasecmp((char *)buffer, "sec-websocket-key:", 18) == 0) {
       strtok((char *)buffer, " \t");
       strcpy((char *)wsKey, strtok(NULL, " \t"));
@@ -155,9 +157,11 @@ int WebSocket::handshake(char *requestURI) {
     client.print("Sec-WebSocket-Accept: ");
     client.print(wsKey);
     client.print("\r\n");
-    client.print("Sec-WebSocket-Protocol: ");
-    client.print(supportedProtocol);
-    client.print("\r\n");
+    if (headerValidation & WS_HAS_SUBPROTOCOL) {
+      client.print("Sec-WebSocket-Protocol: ");
+      client.print(supportedProtocol);
+      client.print("\r\n");
+    }
     client.print("\r\n");
 
     status = OPEN;

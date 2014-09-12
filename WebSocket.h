@@ -27,6 +27,7 @@
 #define WS_HAS_SEC_WEBSOCKET_KEY      0x10
 #define WS_HAS_SEC_WEBSOCKET_VERSION  0x20
 #define WS_HAS_ALL_HEADERS            0x3f
+#define WS_HAS_SUBPROTOCOL            0x40
 
 #define WS_FRAME_TEXT   0x01
 #define WS_FRAME_BINARY 0x02
