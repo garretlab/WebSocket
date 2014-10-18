@@ -19,7 +19,7 @@ void WebSocket::begin() {
   server.begin();
 }
 
-int WebSocket::available(int &clientNo) {
+int WebSocket::available(int *clientId) {
   char payloadData[WS_MAX_PAYLOAD_LENGTH + 1];
   int payloadLength;
   char requestURI[WS_MAX_LINE_LENGTH];
@@ -27,47 +27,41 @@ int WebSocket::available(int &clientNo) {
   EthernetClient c;
   int retval = WS_ERROR;
   
-  clientNo = -1;
+  *clientId = -1;
 
   if (c = server.available()) {
     // check for the connection 
     for (int i = 0; i < MAX_SOCK_NUM; i++) {
       if (c == client[i]) { // existing connection
-        clientNo = i;
+        *clientId = i;
         if (status[i] == OPEN) {
-          if (client[clientNo].available()) {
-            opcode = readFrame(payloadData, &payloadLength, clientNo);
+          if (client[*clientId].available()) {
+            opcode = readFrame(payloadData, &payloadLength, *clientId);
             switch (opcode) {
               case WS_FRAME_TEXT:
               case WS_FRAME_BINARY:
                 if (onMessage) {
-                  onMessage(payloadData, payloadLength, clientNo);
+                  onMessage(payloadData, payloadLength, *clientId);
                 }
                 return WS_DATA_RECEIVCED;
               case WS_FRAME_CLOSE :
                 if (onClose) {
-                  onClose(clientNo);
+                  onClose(*clientId);
                 }
-                sendClose(WS_CLOSE_NORMAL, clientNo);
-                client[clientNo].stop();
+                sendClose(WS_CLOSE_NORMAL, *clientId);
+                client[*clientId].stop();
                 return WS_CLOSED;
               default: // got unsupported or unknown message
-                if (onError) {
-                  onError(clientNo);
-                }
-                return WS_PROTOCOL_ERROR;
+                retval = WS_PROTOCOL_ERROR;
+                goto wsAvailableError;
             }
           } else {  // server is available but client is not available
-            if (onError) {
-              onError(clientNo);
-            }
-            return WS_STATUS_MISMATCH;
+            retval = WS_STATUS_MISMATCH;
+            goto wsAvailableError;
           }
         } else { // status is not OPENl
-          if (onError) {
-            onError(clientNo);
-          }
-          return WS_STATUS_MISMATCH;
+          retval = WS_STATUS_MISMATCH;
+          goto wsAvailableError;
         }
       }
     }
@@ -75,16 +69,16 @@ int WebSocket::available(int &clientNo) {
     // New connection.
     for (int i = 0; i < MAX_SOCK_NUM; i++) {
       if (status[i] == CLOSED) {
-        clientNo = i;
+        *clientId = i;
         client[i] = c;
-        if (handshake(requestURI, clientNo) == WS_OK) {
+        if (handshake(requestURI, *clientId) == WS_OK) {
           if (onOpen) {
-            onOpen(requestURI, clientNo);
+            onOpen(requestURI, *clientId);
           }
-          status[clientNo] = OPEN;
+          status[*clientId] = OPEN;
           return WS_CONNECTED;
         } else {
-          status[clientNo] = CLOSED;
+          status[*clientId] = CLOSED;
           return WS_ERROR;
         }
       }
@@ -92,61 +86,51 @@ int WebSocket::available(int &clientNo) {
     
     wsAvailableError:
     if (onError) {
-      onError(clientNo);
+      onError(*clientId);
     }
     return retval;
   }
 }
 
-int WebSocket::sendText(char *text, int clientNo) {
-  return sendPayload((uint8_t *)text, strlen(text), WS_FRAME_TEXT, clientNo);
+int WebSocket::sendText(char *text, int clientId) {
+  return sendPayload((uint8_t *)text, strlen(text), WS_FRAME_TEXT, clientId);
 }
 
-int WebSocket::sendBinary(uint8_t *data, uint8_t dataLength, int clientNo) {
-  return sendPayload(data, dataLength, WS_FRAME_BINARY, clientNo);
+int WebSocket::sendBinary(uint8_t *data, uint8_t dataLength, int clientId) {
+  return sendPayload(data, dataLength, WS_FRAME_BINARY, clientId);
 }
 
-int WebSocket::sendPayload(uint8_t *payLoadData, uint8_t payloadLength, uint8_t opcode, int clientNo) {
-  int from, to;
-  if (clientNo == -1) {
-    from = 0;
-    to = MAX_SOCK_NUM;
-  } else {
-    from = clientNo;
-    to = clientNo + 1;
-  }
-  
-  for (int i = from; i < to; i++) {
-    if (status[i] == OPEN) {
-      if (payloadLength > WS_MAX_PAYLOAD_LENGTH) {
-        return WS_LINE_TOO_LONG;
-      }
-
-      client[i].write(WS_FRAME_FIN | opcode);
-      client[i].write(payloadLength & 0x7f);
-      for (int j = 0; j < payloadLength; j++) {
-        client[i].write(payLoadData[j]);
-      }
+int WebSocket::sendPayload(uint8_t *payLoadData, uint8_t payloadLength, uint8_t opcode, int clientId) {
+  if (status[clientId] == OPEN) {
+    if (payloadLength > WS_MAX_PAYLOAD_LENGTH) {
+      return WS_LINE_TOO_LONG;
     }
+
+    client[clientId].write(WS_FRAME_FIN | opcode);
+    client[clientId].write(payloadLength & 0x7f);
+
+    for (int i = 0; i < payloadLength; i++) {
+      client[clientId].write(payLoadData[i]);
+    }
+    return WS_OK;
+  } else {
+    return WS_STATUS_MISMATCH;
   }
-  return WS_OK;
 }
 
-int WebSocket::sendClose(uint16_t statusCode, int clientNo) {
-  int retval = WS_STATUS_MISMATCH;
-  
-  if (status[clientNo] == OPEN) {
-    client[clientNo].write(WS_FRAME_FIN | WS_FRAME_CLOSE);
-    client[clientNo].write((uint8_t)(statusCode >> 8));
-    client[clientNo].write((uint8_t)(statusCode & 0xff));
-    retval = WS_OK;
+int WebSocket::sendClose(uint16_t statusCode, int clientId) {
+  if (status[clientId] == OPEN) {
+    client[clientId].write(WS_FRAME_FIN | WS_FRAME_CLOSE);
+    client[clientId].write((uint8_t)(statusCode >> 8));
+    client[clientId].write((uint8_t)(statusCode & 0xff));
+    status[clientId] = CLOSED;
+    return WS_OK;
+  } else {
+    return WS_STATUS_MISMATCH;
   }
-  
-  status[clientNo] = CLOSED;
-  return retval;
 }
 
-int WebSocket::handshake(char * requestURI, int clientNo) {
+int WebSocket::handshake(char * requestURI, int clientId) {
   char buffer[WS_MAX_LINE_LENGTH];
   char wsKey[WS_MAX_LINE_LENGTH];
   char charRead;
@@ -154,7 +138,7 @@ int WebSocket::handshake(char * requestURI, int clientNo) {
   uint8_t headerValidation = 0;
   SHA1Context sha;
 
-  while (readHTMLHeader((uint8_t *)buffer, WS_MAX_LINE_LENGTH, clientNo) > 0) {
+  while (readHTMLHeader((uint8_t *)buffer, WS_MAX_LINE_LENGTH, clientId) > 0) {
     if (strncmp((char *)buffer, "GET", 3) == 0) {
       strtok((char *)buffer, " \t");
       strcpy(requestURI, strtok(NULL, " \t"));
@@ -190,29 +174,29 @@ int WebSocket::handshake(char * requestURI, int clientNo) {
     buffer[20] = 0;
 
     base64Encode(buffer, wsKey);
-    client[clientNo].print("HTTP/1.1 101 Switching Protocols\r\n");
-    client[clientNo].print("Upgrade: websocket\r\n");
-    client[clientNo].print("Connection: Upgrade\r\n");
-    client[clientNo].print("Sec-WebSocket-Accept: ");
-    client[clientNo].print(wsKey);
-    client[clientNo].print("\r\n");
+    client[clientId].print("HTTP/1.1 101 Switching Protocols\r\n");
+    client[clientId].print("Upgrade: websocket\r\n");
+    client[clientId].print("Connection: Upgrade\r\n");
+    client[clientId].print("Sec-WebSocket-Accept: ");
+    client[clientId].print(wsKey);
+    client[clientId].print("\r\n");
     if (headerValidation & WS_HAS_SUBPROTOCOL) {
-      client[clientNo].print("Sec-WebSocket-Protocol: ");
-      client[clientNo].print(supportedProtocol);
-      client[clientNo].print("\r\n");
+      client[clientId].print("Sec-WebSocket-Protocol: ");
+      client[clientId].print(supportedProtocol);
+      client[clientId].print("\r\n");
     }
-    client[clientNo].print("\r\n");
+    client[clientId].print("\r\n");
     return WS_OK;
   } else {
     return WS_ERROR;
   }
 }
 
-int WebSocket::readHTMLHeader(uint8_t * buffer, uint8_t bufferLength, int clientNo) {
+int WebSocket::readHTMLHeader(uint8_t * buffer, uint8_t bufferLength, int clientId) {
   int dataRead;
   int numRead = 0;
 
-  while ((dataRead = client[clientNo].read()) != -1) {
+  while ((dataRead = client[clientId].read()) != -1) {
     buffer[numRead++] = dataRead;
     if (dataRead == '\n') {
       buffer[numRead - 2] = '\0';
@@ -225,19 +209,19 @@ int WebSocket::readHTMLHeader(uint8_t * buffer, uint8_t bufferLength, int client
   return WS_ERROR;
 }
 
-int WebSocket::readFrame(char * payloadData, int * payloadLength, int clientNo) {
+int WebSocket::readFrame(char * payloadData, int * payloadLength, int clientId) {
   uint8_t data;
   int opcode;
   int mask;
   char maskingKey[4];
 
-  data = client[clientNo].read();
+  data = client[clientId].read();
   if (!(data & 0x80)) {
     return WS_NOT_SUPPORTED;
   }
   opcode = data & 0x0f;
 
-  data = client[clientNo].read();
+  data = client[clientId].read();
   mask = data & 0x80 ? true : false;
   *payloadLength = data & 0x7f;
 
@@ -247,15 +231,15 @@ int WebSocket::readFrame(char * payloadData, int * payloadLength, int clientNo) 
 
   if (mask) {
     for (int i = 0; i < 4; i++) {
-      maskingKey[i] = client[clientNo].read();
+      maskingKey[i] = client[clientId].read();
     }
   }
 
   for (int i = 0; i < *payloadLength; i++) {
     if (mask) {
-      payloadData[i] = client[clientNo].read() ^ maskingKey[i % 4];
+      payloadData[i] = client[clientId].read() ^ maskingKey[i % 4];
     } else {
-      payloadData[i] = client[clientNo].read();
+      payloadData[i] = client[clientId].read();
     }
   }
   payloadData[*payloadLength] = '\0';

@@ -56,21 +56,21 @@ typedef struct {
   char *variable;
 } wsHeader;
 
-typedef void (*onOpen_t)(char *requestURI, int clientNo);
-typedef void (*onMessage_t)(char *payload, int payloadLength, int clientNo);
-typedef void (*onClose_t)(int clientNo);
-typedef void (*onError_t)(int clientNo);
+typedef void (*onOpen_t)(char *requestURI, int clientId);
+typedef void (*onMessage_t)(char *payload, int payloadLength, int clientId);
+typedef void (*onClose_t)(int clientId);
+typedef void (*onError_t)(int clientId);
 
 class WebSocket {
 public:
   WebSocket(uint16_t port, char *supportedProtocol, onOpen_t onOpen = NULL, onMessage_t onMessage = NULL, onClose_t onClose = NULL, onError_t onError = NULL);
   wsStatus status[MAX_SOCK_NUM];
   void begin();
-  int available(int &newClientNo);
-  int sendText(char *text, int clientNo);
-  int sendBinary(uint8_t *data, uint8_t dataLength, int clientNo);
-  int sendPayload(uint8_t *payLoadData, uint8_t payloadLength, uint8_t opcode, int clientNo);
-  int sendClose(uint16_t statusCode, int clientNo);
+  int available(int *clientId);
+  int sendText(char *text, int clientId);
+  int sendBinary(uint8_t *data, uint8_t dataLength, int clientId);
+  int sendPayload(uint8_t *payLoadData, uint8_t payloadLength, uint8_t opcode, int clientId);
+  int sendClose(uint16_t statusCode, int clientId);
 private:
   EthernetServer server;
   EthernetClient client[MAX_SOCK_NUM];
@@ -80,9 +80,9 @@ private:
   onMessage_t onMessage;
   onClose_t onClose;
   onError_t onError;
-  int handshake(char *requestURI, int clientNo);
-  int readHTMLHeader(uint8_t *buffer, uint8_t bufferLength, int clientNo); 
-  int readFrame(char *frame, int *payloadLength, int clientNo);
+  int handshake(char *requestURI, int clientId);
+  int readHTMLHeader(uint8_t *buffer, uint8_t bufferLength, int clientId); 
+  int readFrame(char *frame, int *payloadLength, int clientId);
 };
 
 #endif /* WEBSOCKET_H */
